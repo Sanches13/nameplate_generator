@@ -4,9 +4,9 @@ from typing import List, Tuple, Dict, Optional
 
 
 class NameplateGenerator:
-    doc = DocxTemplate("template.docx")
+    __doc = DocxTemplate("template.docx")
 
-    blocks = [
+    __blocks = [
         ("01",),
         ("02", "03"),
         ("04", "05"),
@@ -22,25 +22,25 @@ class NameplateGenerator:
         ("18",),
     ]
 
-    floors = ["2", "3", "4", "5", "6", "7", "9"]
+    __floors = ["2", "3", "4", "5", "6", "7", "9"]
 
     # блок - одиночная комната, либо две комнаты с общим тамбуром
     # создает список таплов со всеми блоками комнат
     @staticmethod
-    def generate_blocks() -> List[Tuple]:
+    def __generate_blocks() -> List[Tuple]:
         all_blocks = []
-        for floor in NameplateGenerator.floors:
-            for block in NameplateGenerator.blocks:
+        for floor in NameplateGenerator.__floors:
+            for block in NameplateGenerator.__blocks:
                 all_blocks.append(tuple(f"{floor}{room}" for room in block))
         return all_blocks
 
     # делает из словаря с кортежами другой словарь с кортежами
     @staticmethod
-    def fill_blocks(
+    def __fill_blocks(
         rooms: Dict[str, List[Tuple]]
     ) -> Dict[Tuple, List[Dict[str, List[Tuple]]]]:
         # Список с таплами блоков
-        all_blocks = NameplateGenerator.generate_blocks()
+        all_blocks = NameplateGenerator.__generate_blocks()
         # Словарь, где ключ - блок, а значение - список студентов
         all_fill_blocks = {}
         for block in all_blocks:
@@ -56,7 +56,7 @@ class NameplateGenerator:
 
     # создает таблички всех комнат
     def generate_nameplates(rooms: Dict[str, List[Tuple]]) -> None:
-        all_fill_blocks = NameplateGenerator.fill_blocks(rooms)
+        all_fill_blocks = NameplateGenerator.__fill_blocks(rooms)
 
         # создаем директорию с табличками
         if os.path.exists(os.path.join(os.path.abspath("."), "nameplates")):
@@ -65,7 +65,7 @@ class NameplateGenerator:
 
         for block, rooms in all_fill_blocks.items():
             if rooms != []:
-                NameplateGenerator.nameplate_generate(
+                NameplateGenerator.__nameplate_generate(
                     rooms
                 )
 
@@ -78,7 +78,7 @@ class NameplateGenerator:
 
     # создает одну табличку
     @staticmethod
-    def nameplate_generate(
+    def __nameplate_generate(
         rooms: List[Dict[str, List[Tuple]]]
     ) -> None:
         
@@ -106,5 +106,5 @@ class NameplateGenerator:
         filename = str(first_room_number)
         if has_neighbor:
             filename += f"_{second_room_number}"
-        NameplateGenerator.doc.render(context)
-        NameplateGenerator.doc.save(f"./nameplates/{filename}.docx")
+        NameplateGenerator.__doc.render(context)
+        NameplateGenerator.__doc.save(f"./nameplates/{filename}.docx")
