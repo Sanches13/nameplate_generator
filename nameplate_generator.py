@@ -1,6 +1,6 @@
-import os, shutil, zipfile
+import os, zipfile, tempfile
 from docxtpl import DocxTemplate
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple, Dict
 
 
 class NameplateGenerator:
@@ -58,30 +58,19 @@ class NameplateGenerator:
     def generate_nameplates(rooms: Dict[str, List[Tuple]]) -> None:
         all_fill_blocks = NameplateGenerator.__fill_blocks(rooms)
 
-        # создаем директорию с табличками
-        if os.path.exists(os.path.join(os.path.abspath("."), "nameplates")):
-            shutil.rmtree(os.path.join(os.path.abspath("."), "nameplates"))
-        os.mkdir(os.path.join(os.path.abspath("."), "nameplates"))
+        with tempfile.TemporaryDirectory() as tmpdir, zipfile.ZipFile(
+            "nameplates.zip", "w"
+        ) as z:
+            for rooms in all_fill_blocks.values():
+                if rooms != []:
+                    NameplateGenerator.__nameplate_generate(tmpdir, rooms)
 
-        for block, rooms in all_fill_blocks.items():
-            if rooms != []:
-                NameplateGenerator.__nameplate_generate(
-                    rooms
-                )
-
-        # Кринжовое создание архива с табличками и удаление директории
-        z = zipfile.ZipFile("nameplates.zip", "w")
-        for file in os.listdir("./nameplates"):
-            z.write(f"./nameplates/{file}")
-        z.close()
-        shutil.rmtree(os.path.join(os.path.abspath("."), "nameplates"))
+            for file in os.listdir(tmpdir):
+                z.write(os.path.join(tmpdir, file), f"./nameplates/{file}")
 
     # создает одну табличку
     @staticmethod
-    def __nameplate_generate(
-        rooms: List[Dict[str, List[Tuple]]]
-    ) -> None:
-        
+    def __nameplate_generate(dirname: str, rooms: List[Dict[str, List[Tuple]]]) -> None:
         has_neighbor = len(rooms) == 2
         first_room_number = list(rooms[0].keys())[0]
         second_room_number = list(rooms[1].keys())[0] if has_neighbor else None
@@ -90,10 +79,14 @@ class NameplateGenerator:
         for room in rooms:
             for room_number, students in room.items():
                 for student in students:
-                    rooms_tables[room_number].append({"surname": student[0],
-                                            "name": student[1],
-                                            "patronymic": student[2],
-                                            "course": student[3]})
+                    rooms_tables[room_number].append(
+                        {
+                            "surname": student[0],
+                            "name": student[1],
+                            "patronymic": student[2],
+                            "course": student[3],
+                        }
+                    )
 
         context = {
             "has_neighbor": has_neighbor,
@@ -107,4 +100,4 @@ class NameplateGenerator:
         if has_neighbor:
             filename += f"_{second_room_number}"
         NameplateGenerator.__doc.render(context)
-        NameplateGenerator.__doc.save(f"./nameplates/{filename}.docx")
+        NameplateGenerator.__doc.save(os.path.join(dirname, f"{filename}.docx"))
