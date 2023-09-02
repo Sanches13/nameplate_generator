@@ -1,83 +1,68 @@
-import os, zipfile, tempfile
+import os, zipfile, tempfile, copy
 from docxtpl import DocxTemplate
 from typing import List, Tuple, Dict
+from models import Student, Room, NameplateConfig
 import concurrent.futures
 
 
 class NameplateGenerator:
     __doc = DocxTemplate("template.docx")
 
-    __blocks = [
-        ("01",),
-        ("02", "03"),
-        ("04", "05"),
-        ("06", "07"),
-        ("08", "09"),
-        ("10",),
-        ("11", "12"),
-        ("13",),
-        ("14",),
-        ("15",),
-        ("16",),
-        ("17",),
-        ("18",),
-    ]
-
-    __floors = ["2", "3", "4", "5", "6", "7", "9"]
-
-    # блок - одиночная комната, либо две комнаты с общим тамбуром
-    # создает список таплов со всеми блоками комнат
     @staticmethod
-    def __generate_blocks() -> List[Tuple]:
-        all_blocks = []
-        for floor in NameplateGenerator.__floors:
-            for block in NameplateGenerator.__blocks:
-                all_blocks.append(tuple(f"{floor}{room}" for room in block))
-        return all_blocks
+    def __get_neighbour(
+        current_rooms_config: list[Room],
+        blocks_config: list[tuple[int]],
+        room_number: int,
+    ) -> int | None:
+        floor = room_number // 100
+        main_part = room_number % 100
 
-    # делает из словаря с кортежами другой словарь с кортежами
+        for block in blocks_config:
+            if len(block) != 1 and main_part in block:
+                block_as_list = list(block)
+                block_as_list.remove(main_part)
+                neighbour_main_part = block_as_list[0]
+                for neighbour_room_number, neighbours in current_rooms_config.items():
+                    if floor == neighbour_room_number // 100 and neighbour_main_part == neighbour_room_number % 100:
+                        return neighbour_room_number
+
     @staticmethod
-    def __fill_blocks(
-        rooms: Dict[str, List[Tuple]]
-    ) -> Dict[Tuple, List[Dict[str, List[Tuple]]]]:
-        # Список с таплами блоков
-        all_blocks = NameplateGenerator.__generate_blocks()
-        # Словарь, где ключ - блок, а значение - список студентов
-        all_fill_blocks = {}
-        for block in all_blocks:
-            all_fill_blocks.setdefault(block, [])
-
-        for room_number, students in rooms.items():
-            for block in all_blocks:
-                for block_room_number in block:
-                    if room_number == block_room_number:
-                        all_fill_blocks[block].append({room_number: students})
-                        break
-        return all_fill_blocks
+    def __generate_blocks(config: NameplateConfig) -> list[list[Room]]:
+        blocks_list = []
+        current_rooms_config = copy.deepcopy(config.rooms)
+        for room_number, students in config.rooms.items():
+            if room_number not in current_rooms_config.keys():
+                continue
+            block_rooms = [{room_number: students}]
+            del current_rooms_config[room_number]
+            neighbour = NameplateGenerator.__get_neighbour(
+                current_rooms_config, config.block_config, room_number
+            )
+            if neighbour:
+                block_rooms += [{neighbour: config.rooms[neighbour]}]
+                del current_rooms_config[neighbour]
+            blocks_list.append(block_rooms)
+        return blocks_list
 
     # создает таблички всех комнат
-    def generate_nameplates(rooms: Dict[str, List[Tuple]]) -> None:
-        all_fill_blocks = NameplateGenerator.__fill_blocks(rooms)
-
+    def generate_nameplates(config: NameplateConfig) -> None:
         with tempfile.TemporaryDirectory() as tmpdir, zipfile.ZipFile(
             "nameplates.zip", "w"
         ) as z:
-            
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                for rooms in all_fill_blocks.values():
-                    if rooms != []:
-                        future = executor.submit(NameplateGenerator.__nameplate_generate, tmpdir, rooms)
-                        try:
-                            future.result()
-                        except Exception as e:
-                            print(e)
-
+                blocks = NameplateGenerator.__generate_blocks(config)
+                for rooms in blocks:
+                    future = executor.submit(
+                        NameplateGenerator.__nameplate_generate, tmpdir, rooms
+                    )
+                    future.result()
+                    
             for file in os.listdir(tmpdir):
                 z.write(os.path.join(tmpdir, file), f"./nameplates/{file}")
 
     # создает одну табличку
     @staticmethod
-    def __nameplate_generate(dirname: str, rooms: List[Dict[str, List[Tuple]]]) -> None:
+    def __nameplate_generate(dirname: str, rooms: list[Room]) -> None:
         has_neighbor = len(rooms) == 2
         first_room_number = list(rooms[0].keys())[0]
         second_room_number = list(rooms[1].keys())[0] if has_neighbor else None
@@ -88,10 +73,10 @@ class NameplateGenerator:
                 for student in students:
                     rooms_tables[room_number].append(
                         {
-                            "surname": student[0],
-                            "name": student[1],
-                            "patronymic": student[2],
-                            "course": student[3],
+                            "surname": student.surname,
+                            "name": student.name,
+                            "patronymic": student.patronymic,
+                            "course": student.course
                         }
                     )
 
@@ -100,7 +85,7 @@ class NameplateGenerator:
             "first_room_number": first_room_number,
             "second_room_number": second_room_number,
             "first_room": rooms_tables[first_room_number],
-            "second_room": rooms_tables[second_room_number],
+            "second_room": rooms_tables[second_room_number]
         }
 
         filename = str(first_room_number)
