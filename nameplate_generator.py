@@ -1,6 +1,7 @@
 import os, zipfile, tempfile
 from docxtpl import DocxTemplate
 from typing import List, Tuple, Dict
+import concurrent.futures
 
 
 class NameplateGenerator:
@@ -61,9 +62,15 @@ class NameplateGenerator:
         with tempfile.TemporaryDirectory() as tmpdir, zipfile.ZipFile(
             "nameplates.zip", "w"
         ) as z:
-            for rooms in all_fill_blocks.values():
-                if rooms != []:
-                    NameplateGenerator.__nameplate_generate(tmpdir, rooms)
+            
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                for rooms in all_fill_blocks.values():
+                    if rooms != []:
+                        future = executor.submit(NameplateGenerator.__nameplate_generate, tmpdir, rooms)
+                        try:
+                            future.result()
+                        except Exception as e:
+                            print(e)
 
             for file in os.listdir(tmpdir):
                 z.write(os.path.join(tmpdir, file), f"./nameplates/{file}")
